@@ -1,14 +1,10 @@
 package io.github.jumperonjava.imaginebook.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.systems.RenderSystem;
 import io.github.jumperonjava.imaginebook.*;
 import io.github.jumperonjava.imaginebook.image.ImageData;
 import io.github.jumperonjava.imaginebook.util.VersionFunctions;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Drawable;
-import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.BookScreen;
 import net.minecraft.client.gui.widget.PageTurnWidget;
@@ -33,7 +29,6 @@ public class BookScreenMixin extends Screen {
     private PageTurnWidget previousPageButton;
     List<List<ImageData>> imaginebook_pages = new ArrayList<>();
     private Text error;
-    private Element closeButton;
 
     protected BookScreenMixin(Text title) {
         super(title);
@@ -112,14 +107,5 @@ public class BookScreenMixin extends Screen {
         }
         previousPageButton.render(context, mouseX, mouseY, delta);
         nextPageButton.render(context, mouseX, mouseY, delta);
-        if (closeButton != null) {
-            ((Drawable) closeButton).render(context, mouseX, mouseY, delta);
-        }
-    }
-
-    @WrapOperation(method = "addCloseButton", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ingame/BookScreen;addDrawableChild(Lnet/minecraft/client/gui/Element;)Lnet/minecraft/client/gui/Element;"))
-    Element capture(BookScreen instance, Element element, Operation<Element> original) {
-        this.closeButton = element;
-        return original.call(instance, element);
     }
 }

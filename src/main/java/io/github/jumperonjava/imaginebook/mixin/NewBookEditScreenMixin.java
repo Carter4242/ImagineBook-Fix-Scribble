@@ -244,7 +244,8 @@ public abstract class NewBookEditScreenMixin extends Screen {
     void init(CallbackInfo ci) {
         int elementHeight = 20;
         int gap = 4;
-        int heightOffset = height - 50;
+        // Keep the ImagineBook toolbar above the vanilla/Scribble Sign and Done row on compact GUI scales.
+        int heightOffset = height < 280 ? 127 : height - 50;
         int columnSize = 100 - gap;
         int smallFieldWidth = columnSize - 24;
 
@@ -335,6 +336,10 @@ public abstract class NewBookEditScreenMixin extends Screen {
         });
 
         addButton = addDrawableChild(ButtonWidget.builder(Text.translatable("imaginebook.gui.add"), (b) -> {
+            if (currentEdited != -1) {
+                setCurrentEdited(-1);
+                return;
+            }
             var newImage = new ImageData("", (short) 0, (short) 0, 1, 1);
             addCurrentPageImage(newImage);
             setCurrentEdited(display_pages.get(currentPage).size() - 1);
@@ -853,7 +858,7 @@ public abstract class NewBookEditScreenMixin extends Screen {
             }
         }
 
-        List.of(urlField, addButton, removeButton, widthButton, widthField, heightButton, heightField, xPosButton, xPosField, yPosButton, yPosField, nextPageButton, previousPageButton, /*? if <1.21.6 {*/signButton, doneButton,/*?}*/spinButton, spinField).forEach(e -> e.render(context, mouseX, mouseY, delta));
+        List.of(urlField, addButton, removeButton, widthButton, widthField, heightButton, heightField, xPosButton, xPosField, yPosButton, yPosField, nextPageButton, previousPageButton, spinButton, spinField).forEach(e -> e.render(context, mouseX, mouseY, delta));
 
         int i = (this.width - 192) / 2;
         int j = 2;
