@@ -6,7 +6,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import io.github.jumperonjava.imaginebook.*;
 import io.github.jumperonjava.imaginebook.image.Image;
 import io.github.jumperonjava.imaginebook.image.ImageData;
-import io.github.jumperonjava.imaginebook.mixin.accessor.LineAccessor;
 import io.github.jumperonjava.imaginebook.mixin.accessor.PageContentAccessor;
 import io.github.jumperonjava.imaginebook.mixin.accessor.ScreenAccessor;
 import io.github.jumperonjava.imaginebook.util.DeletedImageData;
@@ -22,7 +21,6 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.resource.language.I18n;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.client.util.SelectionManager;
-import net.minecraft.client.util.math.Rect2i;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.sound.SoundEvents;
@@ -71,8 +69,6 @@ public abstract class NewBookEditScreenMixin extends Screen {
     private PageTurnWidget nextPageButton;
     @Shadow
     private PageTurnWidget previousPageButton;
-    @Shadow
-    private Text pageIndicatorText;
 
     //? if >= 1.21.6 {
     /*@Shadow
@@ -94,12 +90,6 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Shadow
     protected abstract BookEditScreen.PageContent getPageContent();
-
-    @Shadow
-    protected abstract void drawSelection(DrawContext context, Rect2i[] selectionRectangles);
-
-    @Shadow
-    protected abstract void drawCursor(DrawContext context, BookEditScreen.Position position, boolean atEnd);
 
     @Shadow
     protected abstract void invalidatePageContent();
@@ -127,16 +117,22 @@ public abstract class NewBookEditScreenMixin extends Screen {
     }
 
     List<List<ImageData>> display_pages = new ArrayList<>();
+    private boolean imaginebookEnabled;
 
 
     @Inject(method = "<init>", at = @At("TAIL"))
         //? if >= 1.21.3 {
-    /*void construct(PlayerEntity player, ItemStack stack, Hand hand, WritableBookContentComponent writableBookContent, CallbackInfo ci) {
+    /*void construct(PlayerEntity player, ItemStack itemStack, Hand hand, WritableBookContentComponent writableBookContent, CallbackInfo ci) {
         *///?} else {
         void construct(PlayerEntity player, ItemStack itemStack, Hand hand, CallbackInfo ci) {
          //?}
+        imaginebookEnabled = Imaginebook.hasImagesTag(itemStack);
+        Imaginebook.clearCapturedBookImagesTag();
         for (int i = 0; i < 250; i++) {
             display_pages.add(new ArrayList<>());
+        }
+        if (!imaginebookEnabled) {
+            return;
         }
         updateDisplayImages();
     }
@@ -145,6 +141,11 @@ public abstract class NewBookEditScreenMixin extends Screen {
         for (int i = 0; i < pages.size(); i++) {
             var page = pages.get(i);
             display_pages.set(i, ImageSerializer.parseSafeModeImages(page));
+        }
+        if (!hasCurrentDisplayPage() || !isCurrentPageImageIdValid(currentEdited)) {
+            currentEdited = -1;
+            draggedByMouse = -1;
+            return;
         }
         currentEdited = Math.min(currentEdited, display_pages.get(currentPage).size() - 1);
     }
@@ -179,14 +180,25 @@ public abstract class NewBookEditScreenMixin extends Screen {
     /*? if <1.21.6 {*/
     @Inject(method = "changePage", at = @At("HEAD"))
     void onChangePage(CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         currentEdited = -1;
+        draggedByMouse = -1;
     }
 
     @WrapOperation(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/screen/ingame/BookEditScreen;setFocused(Lnet/minecraft/client/gui/Element;)V"))
-    void ignoreSetFocused(BookEditScreen instance, Element element, Operation<Void> original) {}
+    void ignoreSetFocused(BookEditScreen instance, Element element, Operation<Void> original) {
+        if (!imaginebookEnabled) {
+            original.call(instance, element);
+        }
+    }
 
     @Inject(method = "updateButtons", at = @At("HEAD"), cancellable = true)
     void updateButtons(CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         if (Imaginebook.cancelledFinalize) {
             this.signing = false;
         }
@@ -194,6 +206,9 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Inject(method = "invalidatePageContent", at = @At("HEAD"))
     void updateSafeModeImages(CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         updateDisplayImages();
     }
     /*?}*/
@@ -212,11 +227,17 @@ public abstract class NewBookEditScreenMixin extends Screen {
     //current page get
     @Nullable
     ImageData getCurrentPageImage(int id) {
-        if (id == -1)
-            return null;
-        if (display_pages.get(currentPage).isEmpty())
+        if (!isCurrentPageImageIdValid(id))
             return null;
         return display_pages.get(currentPage).get(id);
+    }
+
+    private boolean hasCurrentDisplayPage() {
+        return currentPage >= 0 && currentPage < display_pages.size();
+    }
+
+    private boolean isCurrentPageImageIdValid(int id) {
+        return hasCurrentDisplayPage() && id >= 0 && id < display_pages.get(currentPage).size();
     }
 
     void addCurrentPageImage(ImageData image) {
@@ -226,6 +247,10 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Override
     protected void switchFocus(GuiNavigationPath path) {
+        if (!imaginebookEnabled) {
+            super.switchFocus(path);
+            return;
+        }
         //forge eats ass and doesn't apply access widener
         //? if forge {
         /*try {
@@ -242,9 +267,11 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("HEAD"))
     void init(CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         int elementHeight = 20;
         int gap = 4;
-        // Keep the ImagineBook toolbar above the vanilla/Scribble Sign and Done row on compact GUI scales.
         int heightOffset = height < 280 ? 127 : height - 50;
         int columnSize = 100 - gap;
         int smallFieldWidth = columnSize - 24;
@@ -487,6 +514,15 @@ public abstract class NewBookEditScreenMixin extends Screen {
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     void mouseClicked(double mouseX, double mouseY, int mouseButton, CallbackInfoReturnable<Boolean> cir) {
         //?}
+        if (!imaginebookEnabled) {
+            //? if >= 1.21.9 {
+            /*return super.mouseClicked(click, doubled);
+            *///?} else if >= 1.21.6 {
+            /*return super.mouseClicked(mouseX, mouseY, mouseButton);
+            *///?} else {
+            return;
+            //?}
+        }
         var images = display_pages.get(currentPage);
         //? if >= 1.21.6 {
         /*boolean inSigningScreen = client.currentScreen instanceof BookSigningScreen;
@@ -562,6 +598,15 @@ public abstract class NewBookEditScreenMixin extends Screen {
     @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
     public void mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY, CallbackInfoReturnable<Boolean> cir) {
     //?}
+        if (!imaginebookEnabled) {
+            //? if >= 1.21.9 {
+            /*return super.mouseDragged(click, deltaX, deltaY);
+            *///?} else if >= 1.21.6 {
+            /*return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+            *///?} else {
+            return;
+            //?}
+        }
         //? if >= 1.21.9 {
         /*if (click.button() != 0)
         *///?} else {
@@ -604,6 +649,13 @@ public abstract class NewBookEditScreenMixin extends Screen {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         //?}
+        if (!imaginebookEnabled) {
+            //? if >= 1.21.9 {
+            /*return super.mouseReleased(click);
+            *///?} else {
+            return super.mouseReleased(mouseX, mouseY, button);
+            //?}
+        }
         if (draggedByMouse != -1) {
             updateFields();
             draggedByMouse = -1;
@@ -616,11 +668,21 @@ public abstract class NewBookEditScreenMixin extends Screen {
     }
 
     void mutateImage(int id, Function<ImageData, ImageData> function) {
-        if (id == -1)
+        var currentImage = getCurrentPageImage(id);
+        if (currentImage == null) {
+            if (id == currentEdited) {
+                setCurrentEdited(-1);
+            }
+            if (id == draggedByMouse) {
+                draggedByMouse = -1;
+            }
             return;
-        getCurrentPageImage(id);
-        var original = new ImageData(getCurrentPageImage(id));
+        }
+        var original = new ImageData(currentImage);
         var modifiedImage = function.apply(original);
+        if (modifiedImage == null) {
+            return;
+        }
         Pattern pattern = Pattern.compile("\\[.*?\\]");
 
         Matcher matcher = pattern.matcher(getCurrentPageContent());
@@ -650,6 +712,13 @@ public abstract class NewBookEditScreenMixin extends Screen {
      //?} else {
     /*public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         *///?}
+        if (!imaginebookEnabled) {
+            //? if < 1.20.4 {
+            return super.mouseScrolled(mouseX, mouseY, verticalAmount);
+            //?} else {
+            /*return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            *///?}
+        }
         //? if >= 1.21.6
         /*boolean inSigningScreen = client.currentScreen instanceof BookSigningScreen;*/
         if (/*? if <1.21.6 {*/!signing/*?} else {*/ /*!inSigningScreen *//*?}*/) {
@@ -795,6 +864,9 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Inject(method = "render", at = @At("TAIL"))
     void render(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         currentPage = MathHelper.clamp(currentPage, -1, display_pages.size() - 1);
 
         /*? if <1.21.6 {*/
@@ -859,40 +931,6 @@ public abstract class NewBookEditScreenMixin extends Screen {
         }
 
         List.of(urlField, addButton, removeButton, widthButton, widthField, heightButton, heightField, xPosButton, xPosField, yPosButton, yPosField, nextPageButton, previousPageButton, spinButton, spinField).forEach(e -> e.render(context, mouseX, mouseY, delta));
-
-        int i = (this.width - 192) / 2;
-        int j = 2;
-        int n = this.textRenderer.getWidth(this.pageIndicatorText);
-        context.drawText(this.textRenderer, this.pageIndicatorText, i - n + 192 - 44, 18, 0x3F000000, false);
-
-        /*? if <1.21.6 {*/
-        for (var line : ((PageContentAccessor) this.getPageContent()).getLines()) {
-            context.drawText(this.textRenderer, ((LineAccessor) line).getText(), ((LineAccessor) line).getX(), ((LineAccessor) line).getY(), 0x3F000000, false);
-        }
-
-        this.drawSelection(context, ((PageContentAccessor) this.getPageContent()).getSelectionRectangles());
-        this.drawCursor(context, ((PageContentAccessor) this.getPageContent()).getPosition(), ((PageContentAccessor) this.getPageContent()).isAtEnd());
-
-        if (((PageContentAccessor) this.getPageContent()).getLines().length > 14) {
-            context.drawCenteredTextWithShadow(client.textRenderer, Text.translatable("imaginebook.error.too_much_lines"), width / 2, 222, VersionFunctions.ColorHelper.getArgb(255, 255, 100, 100));
-        }
-        //?} else {
-        /*int contentAreaX = (this.width - BookEditScreen.MAX_TEXT_WIDTH) / 2 - 4;
-        int contentAreaY = 32;
-
-        List<OrderedText> wrappedLines = this.textRenderer.wrapLines(StringVisitable.plain(getCurrentPageContent()), BookEditScreen.MAX_TEXT_WIDTH);
-
-        int currentLineY = contentAreaY;
-        int lineHeight = this.textRenderer.fontHeight;
-
-        for (OrderedText line : wrappedLines) {
-            int lineDrawY = currentLineY;
-
-            context.drawText(this.textRenderer, line, contentAreaX, lineDrawY, 0x3F000000, false);
-
-            currentLineY += lineHeight;
-        }
-        *///?}
     }
 
 
@@ -903,6 +941,9 @@ public abstract class NewBookEditScreenMixin extends Screen {
 
     @Inject(method = "finalizeBook", at = @At("HEAD"), cancellable = true)
     void finalizeBook( /*? if <1.21.6 {*/boolean sign,/*?}*/ CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         /*? if <1.21.6 {*/
         if (!this.dirty) {
             this.dirty = true;

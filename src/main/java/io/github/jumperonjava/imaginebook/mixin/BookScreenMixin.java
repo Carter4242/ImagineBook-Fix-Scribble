@@ -29,6 +29,7 @@ public class BookScreenMixin extends Screen {
     private PageTurnWidget previousPageButton;
     List<List<ImageData>> imaginebook_pages = new ArrayList<>();
     private Text error;
+    private boolean imaginebookEnabled;
 
     protected BookScreenMixin(Text title) {
         super(title);
@@ -37,14 +38,21 @@ public class BookScreenMixin extends Screen {
 
     @Inject(method = "<init>(Lnet/minecraft/client/gui/screen/ingame/BookScreen$Contents;Z)V", at = @At("TAIL"))
     void construct(BookScreen.Contents contents, boolean playPageTurnSound, CallbackInfo ci) {
+        imaginebookEnabled = Imaginebook.consumeBookImagesTag();
         for (int i = 0; i < 255; i++) {
             imaginebook_pages.add(new ArrayList<>());
+        }
+        if (!imaginebookEnabled) {
+            return;
         }
         parseImages(contents);
     }
 
     @Inject(method = "setPageProvider", at = @At("TAIL"))
     void construct(BookScreen.Contents pageProvider, CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         parseImages(pageProvider);
     }
 
@@ -82,6 +90,9 @@ public class BookScreenMixin extends Screen {
 
     @Inject(method = "render", at = @At("TAIL"))
     void render(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        if (!imaginebookEnabled) {
+            return;
+        }
         int bookX = this.width / 2 - 96;
         int bookY = 2;
 

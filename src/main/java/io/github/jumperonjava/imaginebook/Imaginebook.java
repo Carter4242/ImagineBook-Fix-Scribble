@@ -5,7 +5,13 @@ import io.github.jumperonjava.imaginebook.resolvers.Resolver;
 import io.github.jumperonjava.imaginebook.resolvers.TextureResolver;
 import io.github.jumperonjava.imaginebook.resolvers.UrlResolver;
 
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
 
+//? if >= 1.20.5 {
+/*import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.NbtComponent;
+*///?}
 
 /*? if fabric {*/
 import net.fabricmc.loader.api.FabricLoader;
@@ -33,8 +39,10 @@ import java.util.Map;
 
 public final class Imaginebook {
     public static final String MOD_ID = "imaginebook";
+    public static final String IMAGES_TAG = "images";
     public static Logger LOGGER = LoggerFactory.getLogger("ImagineBook");
     public static final String TEST_BALLER = "https://i.kym-cdn.com/photos/images/original/002/461/188/20d.png";
+    private static Boolean pendingBookImagesEnabled = null;
 
     //? if >=1.21.6 {
     /*public static RenderPipeline GUI_TEXTURED_NOCULL;
@@ -49,6 +57,46 @@ public final class Imaginebook {
 
     public static int LENGTH = 1023;
     public static boolean cancelledFinalize = false;
+
+    public static boolean hasImagesTag(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+
+        //? if >= 1.20.5 {
+        /*NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
+        if (customData == null) {
+            return false;
+        }
+        return hasImagesTag(customData.copyNbt());
+        *///?} else {
+        if (!stack.hasNbt()) {
+            return false;
+        }
+        return hasImagesTag(stack.getNbt());
+        //?}
+    }
+
+    private static boolean hasImagesTag(NbtCompound nbt) {
+        if (nbt == null) {
+            return false;
+        }
+        return nbt.contains(IMAGES_TAG);
+    }
+
+    public static void captureBookImagesTag(ItemStack stack) {
+        pendingBookImagesEnabled = hasImagesTag(stack);
+    }
+
+    public static boolean consumeBookImagesTag() {
+        boolean enabled = Boolean.TRUE.equals(pendingBookImagesEnabled);
+        pendingBookImagesEnabled = null;
+        return enabled;
+    }
+
+    public static void clearCapturedBookImagesTag() {
+        pendingBookImagesEnabled = null;
+    }
 
 
     public static String fixImgurLink(String link) {
